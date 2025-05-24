@@ -1,8 +1,6 @@
-// Updated App.jsx with workout template save/apply functionality
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { auth, db } from './firebase';
 
 const days = ['M', 'T', 'W', 'Th', 'F', 'S/S'];
@@ -16,10 +14,6 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [weeks, setWeeks] = useState(Array.from({ length: 12 }, initWeek));
   const [currentWeek, setCurrentWeek] = useState(0);
-  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [showSummary, setShowSummary] = useState(false);
-  const [template, setTemplate] = useState([]);
-  const debounceTimer = useRef(null);
 
   useEffect(() => {
     onAuthStateChanged(auth, async (u) => {
@@ -36,71 +30,25 @@ export default function App() {
     const updated = [...weeks];
     updated[w].days[d][field] = value;
     setWeeks(updated);
-    setHasUnsavedChanges(true);
+  };
+
+  const save = async () => {
+    if (user) await setDoc(doc(db, 'users', user.uid), { weeks });
   };
 
   const changeStartDate = (weekIndex, date) => {
     const updated = [...weeks];
     updated[weekIndex].startDate = date;
     setWeeks(updated);
-    setHasUnsavedChanges(true);
-  };
-
-  const save = async () => {
-    if (user) {
-      await setDoc(doc(db, 'users', user.uid), { weeks });
-      setHasUnsavedChanges(false);
-    }
-  };
-
-  useEffect(() => {
-    if (hasUnsavedChanges) {
-      clearTimeout(debounceTimer.current);
-      debounceTimer.current = setTimeout(() => {
-        save();
-      }, 1000);
-    }
-  }, [weeks]);
-
-  const handleLogout = async () => {
-    if (hasUnsavedChanges) {
-      const confirmLeave = window.confirm("You have unsaved changes. Do you want to save before logging out?");
-      if (confirmLeave) {
-        await save();
-      }
-    }
-    signOut(auth);
-  };
-
-  const saveTemplate = () => {
-    const templateData = weeks[currentWeek].days.map(d => ({ workout: d.workout }));
-    setTemplate(templateData);
-    alert("✅ Workout template saved!");
-  };
-
-  const applyTemplate = () => {
-    if (!template.length) return alert("⚠️ No template saved yet.");
-    const updated = [...weeks];
-    updated[currentWeek].days = updated[currentWeek].days.map((day, i) => ({
-      ...day,
-      workout: template[i]?.workout || ''
-    }));
-    setWeeks(updated);
-    setHasUnsavedChanges(true);
-    alert("📂 Template applied to current week");
   };
 
   const current = weeks[currentWeek];
-  const chartData = weeks.map((week, index) => ({
-    name: `Week ${index + 1}`,
-    weight: Number(week.weight) || null,
-  })).filter(w => w.weight);
 
   return (
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800">
       <header className="bg-white shadow-md px-6 py-4 flex justify-between items-center">
         <h1 className="text-xl font-bold">Oxygen Gym Tracker</h1>
-        {user && <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-1 rounded">Logout</button>}
+        {user && <button onClick={() => signOut(auth)} className="bg-red-500 text-white px-3 py-1 rounded">Logout</button>}
       </header>
 
       <main className="p-4">
@@ -110,28 +58,58 @@ export default function App() {
               Sign in with Google
             </button>
           </div>
-        ) : showSummary ? (
-          ... // unchanged summary content
         ) : (
           <div className="space-y-6">
-            <div className="flex justify-between items-center flex-wrap gap-2">
-              <div className="flex gap-2 items-center">
-                <button onClick={() => setCurrentWeek(w => Math.max(w - 1, 0))} className="px-3 py-1 bg-gray-300 rounded">⬅️ Previous</button>
+            <div className="flex justify-between items-center">
+              <button onClick={() => setCurrentWeek(w => Math.max(w - 1, 0))} className="px-3 py-1 bg-gray-300 rounded">⬅️ Previous</button>
+              <div className="flex items-center gap-3">
                 <span className="font-medium">Week {currentWeek + 1} of 12</span>
                 <select value={currentWeek} onChange={e => setCurrentWeek(Number(e.target.value))} className="border rounded px-2 py-1">
                   {weeks.map((_, i) => <option key={i} value={i}>Week {i + 1}</option>)}
                 </select>
-                <button onClick={() => setCurrentWeek(w => Math.min(w + 1, 11))} className="px-3 py-1 bg-gray-300 rounded">Next ➡️</button>
               </div>
-              <div className="flex gap-2">
-                <button onClick={saveTemplate} className="px-4 py-2 bg-yellow-500 text-white rounded shadow hover:bg-yellow-600">💾 Save Template</button>
-                <button onClick={applyTemplate} className="px-4 py-2 bg-blue-500 text-white rounded shadow hover:bg-blue-600">📂 Apply Template</button>
-                <button onClick={() => setShowSummary(true)} className="px-4 py-2 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 transition">🔍 View Progress Summary</button>
-              </div>
+              <button onClick={() => setCurrentWeek(w => Math.min(w + 1, 11))} className="px-3 py-1 bg-gray-300 rounded">Next ➡️</button>
             </div>
 
-            ... // unchanged weekly tracker card
-
+            <div className="bg-white p-6 rounded-xl shadow-md">
+              <div className="mb-3">
+                <label className="block text-sm font-medium mb-1">Start Date:</label>
+                <input
+                  type="date"
+                  className="border px-3 py-1 rounded"
+                  value={current.startDate}
+                  onChange={e => changeStartDate(currentWeek, e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                {current.days.map((day, d) => (
+                  <div key={d} className="border rounded-lg p-3 bg-gray-50">
+                    <h3 className="font-medium mb-2">{day.day}</h3>
+                    <input className="w-full mb-1 p-2 border rounded" placeholder="Workout" value={day.workout} onChange={e => updateField(currentWeek, d, 'workout', e.target.value)} />
+                    <input className="w-full mb-1 p-2 border rounded" placeholder="Cardio" value={day.cardio} onChange={e => updateField(currentWeek, d, 'cardio', e.target.value)} />
+                    <input className="w-full mb-1 p-2 border rounded" placeholder="Notes" value={day.notes} onChange={e => updateField(currentWeek, d, 'notes', e.target.value)} />
+                    <button onClick={() => updateField(currentWeek, d, 'done', !day.done)} className={`mt-1 px-3 py-1 rounded text-white ${day.done ? 'bg-green-500' : 'bg-gray-400'}`}>{day.done ? '✔ Done' : 'Mark Done'}</button>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4">
+                <textarea className="w-full p-3 border rounded mb-2" placeholder="Weekly checkpoint summary" value={current.checkpoint} onChange={e => {
+                  const copy = [...weeks];
+                  copy[currentWeek].checkpoint = e.target.value;
+                  setWeeks(copy);
+                }} />
+                <input className="w-full p-2 border rounded" placeholder="Weight (kg)" value={current.weight} onChange={e => {
+                  const copy = [...weeks];
+                  copy[currentWeek].weight = e.target.value;
+                  setWeeks(copy);
+                }} />
+              </div>
+            </div>
+            <div className="flex justify-center">
+              <button onClick={save} className="mt-6 px-6 py-3 bg-green-600 text-white font-semibold rounded shadow hover:bg-green-700 transition">
+                💾 Save Progress
+              </button>
+            </div>
           </div>
         )}
       </main>
