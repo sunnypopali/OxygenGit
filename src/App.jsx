@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+// Updated App.jsx with auto-save on change and logout warning if unsaved changes exist
+import React, { useEffect, useState, useRef } from 'react';
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
@@ -14,6 +15,8 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [weeks, setWeeks] = useState(Array.from({ length: 12 }, initWeek));
   const [currentWeek, setCurrentWeek] = useState(0);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const debounceTimer = useRef(null);
 
   useEffect(() => {
     onAuthStateChanged(auth, async (u) => {
@@ -30,16 +33,40 @@ export default function App() {
     const updated = [...weeks];
     updated[w].days[d][field] = value;
     setWeeks(updated);
-  };
-
-  const save = async () => {
-    if (user) await setDoc(doc(db, 'users', user.uid), { weeks });
+    setHasUnsavedChanges(true);
   };
 
   const changeStartDate = (weekIndex, date) => {
     const updated = [...weeks];
     updated[weekIndex].startDate = date;
     setWeeks(updated);
+    setHasUnsavedChanges(true);
+  };
+
+  const save = async () => {
+    if (user) {
+      await setDoc(doc(db, 'users', user.uid), { weeks });
+      setHasUnsavedChanges(false);
+    }
+  };
+
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      clearTimeout(debounceTimer.current);
+      debounceTimer.current = setTimeout(() => {
+        save();
+      }, 1000);
+    }
+  }, [weeks]);
+
+  const handleLogout = async () => {
+    if (hasUnsavedChanges) {
+      const confirmLeave = window.confirm("You have unsaved changes. Do you want to save before logging out?");
+      if (confirmLeave) {
+        await save();
+      }
+    }
+    signOut(auth);
   };
 
   const current = weeks[currentWeek];
@@ -48,7 +75,7 @@ export default function App() {
     <div className="min-h-screen bg-gray-100 font-sans text-gray-800">
       <header className="bg-white shadow-md px-6 py-4 flex justify-between items-center">
         <h1 className="text-xl font-bold">Oxygen Gym Tracker</h1>
-        {user && <button onClick={() => signOut(auth)} className="bg-red-500 text-white px-3 py-1 rounded">Logout</button>}
+        {user && <button onClick={handleLogout} className="bg-red-500 text-white px-3 py-1 rounded">Logout</button>}
       </header>
 
       <main className="p-4">
@@ -97,11 +124,13 @@ export default function App() {
                   const copy = [...weeks];
                   copy[currentWeek].checkpoint = e.target.value;
                   setWeeks(copy);
+                  setHasUnsavedChanges(true);
                 }} />
                 <input className="w-full p-2 border rounded" placeholder="Weight (kg)" value={current.weight} onChange={e => {
                   const copy = [...weeks];
                   copy[currentWeek].weight = e.target.value;
                   setWeeks(copy);
+                  setHasUnsavedChanges(true);
                 }} />
               </div>
             </div>
@@ -116,3 +145,4 @@ export default function App() {
     </div>
   );
 }
+
