@@ -1,4 +1,4 @@
-// Updated App.jsx with auto-save on change and logout warning if unsaved changes exist
+// Updated App.jsx with summary view for workout data
 import React, { useEffect, useState, useRef } from 'react';
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
@@ -16,6 +16,7 @@ export default function App() {
   const [weeks, setWeeks] = useState(Array.from({ length: 12 }, initWeek));
   const [currentWeek, setCurrentWeek] = useState(0);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showSummary, setShowSummary] = useState(false);
   const debounceTimer = useRef(null);
 
   useEffect(() => {
@@ -85,6 +86,41 @@ export default function App() {
               Sign in with Google
             </button>
           </div>
+        ) : showSummary ? (
+          <div className="space-y-4">
+            <h2 className="text-lg font-bold">Workout Summary</h2>
+            <table className="w-full table-auto bg-white shadow rounded">
+              <thead className="bg-gray-200">
+                <tr>
+                  <th className="p-2 text-left">Week</th>
+                  <th className="p-2 text-left">Start Date</th>
+                  <th className="p-2 text-left">Workouts</th>
+                  <th className="p-2 text-left">Done Days</th>
+                  <th className="p-2 text-left">Weight</th>
+                  <th className="p-2 text-left">Checkpoint</th>
+                </tr>
+              </thead>
+              <tbody>
+                {weeks.map((week, i) => {
+                  const totalDone = week.days.filter(d => d.done).length;
+                  const workoutCount = week.days.filter(d => d.workout).length;
+                  return (
+                    <tr key={i} className="border-t">
+                      <td className="p-2">Week {i + 1}</td>
+                      <td className="p-2">{week.startDate || '-'}</td>
+                      <td className="p-2">{workoutCount}</td>
+                      <td className="p-2">{totalDone}</td>
+                      <td className="p-2">{week.weight || '-'}</td>
+                      <td className="p-2">{week.checkpoint || '-'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div className="text-center">
+              <button onClick={() => setShowSummary(false)} className="mt-4 px-4 py-2 bg-gray-500 text-white rounded">← Back to Tracker</button>
+            </div>
+          </div>
         ) : (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -96,6 +132,10 @@ export default function App() {
                 </select>
               </div>
               <button onClick={() => setCurrentWeek(w => Math.min(w + 1, 11))} className="px-3 py-1 bg-gray-300 rounded">Next ➡️</button>
+            </div>
+
+            <div className="text-right">
+              <button onClick={() => setShowSummary(true)} className="px-4 py-2 bg-indigo-600 text-white rounded shadow hover:bg-indigo-700 transition">🔍 View Progress Summary</button>
             </div>
 
             <div className="bg-white p-6 rounded-xl shadow-md">
@@ -145,4 +185,3 @@ export default function App() {
     </div>
   );
 }
-
